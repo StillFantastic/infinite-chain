@@ -82,7 +82,7 @@ func getP2pPort(addr string) string {
 	return ""
 }
 
-func handleGetBlockCount(conn net.Conn, rpc map[string]interface{}) {
+func handleGetBlockCount(conn net.Conn) {
 	addr := conn.RemoteAddr().String()
 	addr = strings.Split(addr, ":")[0]
 	addr = addr + ":" + getUserPort(addr)
@@ -108,8 +108,43 @@ func handleGetBlockCount(conn net.Conn, rpc map[string]interface{}) {
 	sendData(addr, data)
 }
 
+func handleGetBlockHash(conn net.Conn, rpc map[string]interface{}) {
+	addr := conn.RemoteAddr().String()
+	addr = strings.Split(addr, ":")[0]
+	addr = addr + ":" + getUserPort(addr)
+
+	height := int(rpc["data"].(map[string]interface{})["block_height"].(float64))
+	fmt.Println("height = ", height)
+	var bc Blockchain
+	bc.loadFromFile()
+
+	var jsonData map[string]interface{}
+	if height > len(bc.Blocks) {
+		jsonData = map[string]interface{}{
+			"error": 1,
+			"result": nil,
+		}
+	} else {
+		jsonData = map[string]interface{}{
+			"error": 0,
+			"result": bc.Blocks[height - 1].Hash,
+		}
+	}
+
+	data, err := json.Marshal(jsonData)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	sendData(addr, data)
+}
+
 func handleConnection(conn net.Conn) {
-	rpcBytes, _ := ioutil.ReadAll(conn)
+	rpcBytes, err := ioutil.ReadAll(conn)
+	if err != nil {
+		log.Panic(err)
+	}
+
 	var rpc map[string]interface{}
 	json.Unmarshal(rpcBytes, &rpc)
 
@@ -120,7 +155,9 @@ func handleConnection(conn net.Conn) {
 	//fmt.Println(conn.RemoteAddr().String())
 
 	if rpc["method"] == "getBlockCount" {
-		handleGetBlockCount(conn, rpc)
+		handleGetBlockCount(conn)
+	} else if rpc["method"] == "getBlockHash" {
+		handleGetBlockHash(conn, rpc)
 	}
 
 	conn.Close()
