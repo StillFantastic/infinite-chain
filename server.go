@@ -114,7 +114,6 @@ func handleGetBlockHash(conn net.Conn, rpc map[string]interface{}) {
 	addr = addr + ":" + getUserPort(addr)
 
 	height := int(rpc["data"].(map[string]interface{})["block_height"].(float64))
-	fmt.Println("height = ", height)
 	var bc Blockchain
 	bc.loadFromFile()
 
@@ -128,6 +127,54 @@ func handleGetBlockHash(conn net.Conn, rpc map[string]interface{}) {
 		jsonData = map[string]interface{}{
 			"error": 0,
 			"result": bc.Blocks[height - 1].Hash,
+		}
+	}
+
+	data, err := json.Marshal(jsonData)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	sendData(addr, data)
+}
+
+func getBlockByHash(hash string) *Block {
+	var bc Blockchain
+	bc.loadFromFile()
+	for i := 0; i < len(bc.Blocks); i++ {
+		if bc.Blocks[i].Hash == hash {
+			return bc.Blocks[i]
+		}
+	}
+
+	var block Block
+	return &block
+}
+
+func handleGetBlockHeader(conn net.Conn, rpc map[string]interface{}) {
+	addr := conn.RemoteAddr().String()
+	addr = strings.Split(addr, ":")[0]
+	addr = addr + ":" + getUserPort(addr)
+
+	hash := rpc["data"].(map[string]interface{})["block_hash"].(string)
+	block := getBlockByHash(hash)
+
+	var jsonData map[string]interface{}
+	if block.Height == 0 {
+		jsonData = map[string]interface{}{
+			"error": 1,
+			"result": nil,
+		}
+	} else {
+		jsonData = map[string]interface{}{
+			"error": 0,
+			"result": map[string]interface{}{
+				"version": 1,
+				"prev_block": block.Prev_block,
+				"merkle_root": block.Merkle_root,
+				"target": block.Target,
+				"nonce": fmt.Sprintf("%08x", block.Nonce),
+			},
 		}
 	}
 
@@ -158,6 +205,8 @@ func handleConnection(conn net.Conn) {
 		handleGetBlockCount(conn)
 	} else if rpc["method"] == "getBlockHash" {
 		handleGetBlockHash(conn, rpc)
+	} else if rpc["method"] == "getBlockHeader" {
+		handleGetBlockHeader(conn, rpc)
 	}
 
 	conn.Close()
